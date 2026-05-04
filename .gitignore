@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Python virtualenvs
+.venv
+.venv*
+venv/
+ENV/
+
+# pytest
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+# Environment
+.env
+.env.*
+
+# Secrets
+backend/.data/
+
+# Generated / runtime data
+backend/memory/
+backend/tool-output/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
