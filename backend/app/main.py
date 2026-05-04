@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from .agent import AgentConfigurationError, generate_sql
+from .agent import AgentConfigurationError, DatabaseAgent, generate_sql
 from .cache import result_cache
 from .database import DatabaseConfigurationError, create_database_client
 from .exporters import export_csv, export_insert_sql, export_xlsx
@@ -108,28 +108,29 @@ def get_schema() -> SchemaResponse:
 def query_database(request: QueryRequest) -> QueryResponse:
     settings = load_settings()
     try:
-        client = create_database_client(settings.database)
-        schema_columns = client.list_schema()
-        generated_sql = generate_sql(request.question, schema_columns, settings.llm)
-        limited_sql = apply_row_limit(generated_sql, request.max_rows)
-        started = time.perf_counter()
-        result = client.execute(limited_sql, max_rows=request.max_rows)
-        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        # 使用 DatabaseAgent（ReActAgent）执行查询
+        agent = DatabaseAgent(settings.database, settings.llm)
+        result = agent.run(request.question, max_rows=request.max_rows)
+        sql = result.get("sql", "")
+        columns = result.get("columns", [])
+        rows = result.get("rows", [])
+        elapsed_ms = result.get("elapsed_ms", 0)
+        warnings = result.get("warnings", [])
         entry = ResultCacheEntry(
-            sql=generated_sql,
-            columns=result["columns"],
-            rows=result["rows"],
-            inferred_table_name=infer_export_table_name(generated_sql),
+            sql=sql,
+            columns=columns,
+            rows=rows,
+            inferred_table_name=infer_export_table_name(sql),
         )
         query_id = result_cache.set(entry)
         return QueryResponse(
             query_id=query_id,
-            sql=generated_sql,
-            columns=result["columns"],
-            rows=result["rows"],
-            row_count=len(result["rows"]),
+            sql=sql,
+            columns=columns,
+            rows=rows,
+            row_count=len(rows),
             elapsed_ms=elapsed_ms,
-            warnings=[] if limited_sql == generated_sql else ["已自动限制最大返回行数"],
+            warnings=warnings,
         )
     except (UnsafeSqlError, AgentConfigurationError, DatabaseConfigurationError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
