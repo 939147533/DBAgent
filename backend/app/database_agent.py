@@ -10,7 +10,10 @@ import httpx
 from .database import DatabaseConfigurationError, create_database_client
 from .models import DatabaseSettings, LLMSettings, SchemaColumn
 from .sql_safety import UnsafeSqlError, apply_row_limit, validate_readonly_sql
-
+from .settings_store import load_settings
+from .my_react_agent import MyReActAgent
+from hello_agents import HelloAgentsLLM, ReActAgent
+from hello_agents.tools import ToolRegistry
 
 class AgentConfigurationError(RuntimeError):
     pass
@@ -33,14 +36,40 @@ SYSTEM_PROMPT = """你是数据库 SQL 生成与执行 Agent。
 """
 
 
-class DatabaseAgent:
+class DatabaseAgentAssistant:
     """基于 ReActAgent 的数据库 Agent"""
 
-    def __init__(self, db_settings: DatabaseSettings, llm_settings: LLMSettings, max_steps: int = 10):
-        self.db_settings = db_settings
-        self.llm_settings = llm_settings
-        self.max_steps = max_steps
-        self._client = None
+    def __init__(self,max_steps: int = 10):
+        print("🔄 开始初始化数据库助手...")
+        try:
+            settings = load_settings()
+            self.db_settings = settings.database
+            self.llm_settings = settings.llm
+            self.max_steps = max_steps
+            self._client = None
+
+            registry = ToolRegistry()
+            registry.register_function(self._tool_get_schema, name="GetSchema",
+                                       description="获取数据库 Schema（表名、列名、数据类型、注释）")
+            registry.register_function(self._tool_execute_query, name="ExecuteQuery", description="执行 SQL 并返回结果")
+            self.llm = HelloAgentsLLM(
+                model=self.llm_settings.model,
+                api_key=self.llm_settings.api_key,
+                base_url=self.llm_settings.base_url,
+                temperature=self.llm_settings.temperature,
+            )
+            self.agent = ReActAgent(
+                name="数据库查询Agent",
+                llm=self.llm,
+                tool_registry=registry,
+                system_prompt=SYSTEM_PROMPT,
+                max_steps=self.max_steps
+            )
+        except  Exception as e:
+            print(f"❌ 多智能体系统初始化失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise AgentConfigurationError(f"多智能体系统初始化失败: {str(e)}")
 
     def _get_db_client(self):
         if self._client is None:
@@ -48,29 +77,7 @@ class DatabaseAgent:
         return self._client
 
     def run(self, question: str, max_rows: int = 100) -> dict[str, Any]:
-        from hello_agents import HelloAgentsLLM, ReActAgent
-        from hello_agents.tools import ToolRegistry
-
-        registry = ToolRegistry()
-        registry.register_function(self._tool_get_schema, name="GetSchema", description="获取数据库 Schema（表名、列名、数据类型、注释）")
-        registry.register_function(self._tool_execute_query, name="ExecuteQuery", description="执行 SQL 并返回结果")
-
-        llm = HelloAgentsLLM(
-            model=self.llm_settings.model,
-            api_key=self.llm_settings.api_key,
-            base_url=self.llm_settings.base_url,
-            temperature=self.llm_settings.temperature,
-        )
-
-        agent = ReActAgent(
-            name="database-query-agent",
-            llm=llm,
-            registry=registry,
-            system_prompt=SYSTEM_PROMPT,
-            max_steps=self.max_steps,
-        )
-
-        result_text = agent.run(question)
+        result_text = self.agent.run(question)
         return self._parse_agent_result(result_text, question)
 
     def _tool_get_schema(self, _input: str) -> str:
@@ -200,3 +207,17 @@ def _extract_sql(text: str) -> str:
     if isinstance(parsed, dict) and "sql" in parsed:
         return str(parsed["sql"])
     return stripped
+
+
+# 全局多智能体系统实例
+_database_agent_assistant= None
+
+
+def get_database_agent_assistant() -> DatabaseAgentAssistant:
+    """获取多智能体旅行规划系统实例(单例模式)"""
+    global _database_agent_assistant
+
+    if _database_agent_assistant is None:
+        _database_agent_assistant = DatabaseAgentAssistant()
+
+    return _database_agent_assistant

@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from .agent import AgentConfigurationError, DatabaseAgent, generate_sql
+from .database_agent import AgentConfigurationError, DatabaseAgentAssistant, get_database_agent_assistant, generate_sql
 from .cache import result_cache
 from .database import DatabaseConfigurationError, create_database_client
 from .exporters import export_csv, export_insert_sql, export_xlsx
@@ -106,10 +106,11 @@ def get_schema() -> SchemaResponse:
 
 @app.post("/api/query", response_model=QueryResponse)
 def query_database(request: QueryRequest) -> QueryResponse:
-    settings = load_settings()
+
     try:
+        print("🔄 获取数据库智能体实例...")
         # 使用 DatabaseAgent（ReActAgent）执行查询
-        agent = DatabaseAgent(settings.database, settings.llm)
+        agent = get_database_agent_assistant()
         result = agent.run(request.question, max_rows=request.max_rows)
         sql = result.get("sql", "")
         columns = result.get("columns", [])
