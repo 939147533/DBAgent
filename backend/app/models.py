@@ -62,6 +62,9 @@ class TestConnectionResponse(BaseModel):
     ok: bool
     message: str
 
+class TableColumn(BaseModel):
+    table_name: str
+    table_comments: str
 
 class SchemaColumn(BaseModel):
     table_name: str

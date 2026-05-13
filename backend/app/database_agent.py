@@ -4,7 +4,7 @@ import json
 import re
 import time
 from typing import Any
-
+import ast
 import httpx
 
 from .database import DatabaseConfigurationError, create_database_client
@@ -19,24 +19,16 @@ class AgentConfigurationError(RuntimeError):
     pass
 
 
-SYSTEM_PROMPT = """你是数据库 SQL 生成与执行 Agent。
+SYSTEM_PROMPT = """你是数据库 SQL 生成 Agent。
 目标数据库使用 Oracle SQL 方言，OceanBase Oracle 模式也按 Oracle 方言处理。
-
-## 工作流程
-1. 使用 `GetSchema` 工具获取数据库 Schema（表名、列名、数据类型、注释）
-2. 根据 Schema 生成 Oracle 只读 SQL
-3. 使用 `ExecuteQuery` 工具执行 SQL 并返回结果
-4. 使用 `Finish` 工具返回最终结果
-
-## Oracle SQL 要求
-- 只允许单条只读 SQL：SELECT 或 WITH ... SELECT
-- 禁止 INSERT、UPDATE、DELETE、MERGE、DROP、ALTER、TRUNCATE、CREATE、PL/SQL、过程调用、多语句
-- 只使用提供的 Schema 中的表和列，不要猜测不存在的表和列
-- 当 `ExecuteQuery` 返回结果后，必须立即使用 `Finish` 工具返回最终结果
+只能生成一条只读 SQL：SELECT 或 WITH ... SELECT。
+禁止 INSERT、UPDATE、DELETE、MERGE、DROP、ALTER、TRUNCATE、CREATE、PL/SQL、过程调用、多语句。
+只返回 SQL 文本，不要 Markdown，不要解释。
+优先使用提供的 schema，不要猜测不存在的表和列。
 """
 
 
-class DatabaseAgentAssistant:
+class DatabaseAgent:
     """基于 ReActAgent 的数据库 Agent"""
 
     def __init__(self,max_steps: int = 10):
@@ -49,8 +41,11 @@ class DatabaseAgentAssistant:
             self._client = None
 
             registry = ToolRegistry()
-            registry.register_function(self._tool_get_schema, name="GetSchema",
-                                       description="获取数据库 Schema（表名、列名、数据类型、注释）")
+            registry.register_function(self._tool_get_table, name="GetTableName",
+                                       description="获取数据库表名、表注释）")
+            registry.register_function(self._tool_get_schema_with_table_names, name="GetSchema",
+                                       description="根据表名获取数据库 Schema（表名、列名、数据类型、注释）。入参为表名列表，例子:['table1', 'table2']")
+            # registry.register_function(self._tool_get_schema, name="GetSchema", description="获取数据库 Schema（表名、列名、数据类型、注释）")
             registry.register_function(self._tool_execute_query, name="ExecuteQuery", description="执行 SQL 并返回结果")
             self.llm = HelloAgentsLLM(
                 model=self.llm_settings.model,
@@ -78,12 +73,43 @@ class DatabaseAgentAssistant:
 
     def run(self, question: str, max_rows: int = 100) -> dict[str, Any]:
         result_text = self.agent.run(question)
-        return self._parse_agent_result(result_text, question)
+        sql = _extract_sql(result_text)
+        print("🔍 生成的 SQL:", sql)
+        return sql
 
-    def _tool_get_schema(self, _input: str) -> str:
+    def _tool_get_table(self, _input: str) -> str:
         try:
             client = self._get_db_client()
-            columns = client.list_schema()
+            columns = client.list_table_name()
+            lines = []
+            for col in columns:
+                comments = f" -- {col.table_comments}" if col.table_comments else ""
+                lines.append(f"{col.table_name} {comments}")
+            return "\n".join(lines) if lines else "未找到表名。"
+        except DatabaseConfigurationError as exc:
+            return f"获取表名失败: {exc}"
+        except Exception as exc:
+            return f"获取表名异常: {exc}"
+
+    # def _tool_get_schema(self, _input: str) -> str:
+    #     try:
+    #         client = self._get_db_client()
+    #         columns = client.list_schema()
+    #         lines = []
+    #         for col in columns:
+    #             comment = f" -- {col.comments}" if col.comments else ""
+    #             lines.append(f"{col.table_name}.{col.column_name} {col.data_type}{comment}")
+    #         return "\n".join(lines) if lines else "未找到 Schema 数据。"
+    #     except DatabaseConfigurationError as exc:
+    #         return f"获取 Schema 失败: {exc}"
+    #     except Exception as exc:
+    #         return f"获取 Schema 异常: {exc}"
+    def _tool_get_schema_with_table_names(self, table_names : list[str]) -> str:
+        try:
+            client = self._get_db_client()
+            if isinstance(table_names, str) and table_names.startswith("[") and table_names.endswith("]"):
+                table_names = ast.literal_eval(table_names)
+            columns = client.list_schema(table_names)
             lines = []
             for col in columns:
                 comment = f" -- {col.comments}" if col.comments else ""
@@ -137,41 +163,41 @@ def build_schema_context(columns: list[SchemaColumn], max_lines: int = 220) -> s
     return "\n".join(lines)
 
 
-def generate_sql(question: str, schema_columns: list[SchemaColumn], settings: LLMSettings) -> str:
-    if not settings.api_key or not settings.model:
-        raise AgentConfigurationError("大模型 API Key 或模型名称未配置")
-    prompt = _user_prompt(question, schema_columns)
-    sql = _generate_with_hello_agents(prompt, settings) or _generate_with_openai_compatible(prompt, settings)
-    return validate_readonly_sql(_extract_sql(sql))
+# def generate_sql(question: str, schema_columns: list[SchemaColumn], settings: LLMSettings) -> str:
+#     if not settings.api_key or not settings.model:
+#         raise AgentConfigurationError("大模型 API Key 或模型名称未配置")
+#     prompt = _user_prompt(question, schema_columns)
+#     sql = _generate_with_hello_agents(prompt, settings) or _generate_with_openai_compatible(prompt, settings)
+#     return validate_readonly_sql(_extract_sql(sql))
 
 
-def _user_prompt(question: str, schema_columns: list[SchemaColumn]) -> str:
-    return f"""Schema:
-{build_schema_context(schema_columns)}
+# def _user_prompt(question: str, schema_columns: list[SchemaColumn]) -> str:
+#     return f"""Schema:
+# {build_schema_context(schema_columns)}
+#
+# 用户问题:
+# {question}
+#
+# 请生成一条 Oracle 只读 SQL。"""
 
-用户问题:
-{question}
 
-请生成一条 Oracle 只读 SQL。"""
-
-
-def _generate_with_hello_agents(prompt: str, settings: LLMSettings) -> str | None:
-    try:
-        from hello_agents import HelloAgentsLLM, SimpleAgent
-    except Exception:
-        return None
-    try:
-        llm = HelloAgentsLLM(
-            model=settings.model,
-            api_key=settings.api_key,
-            base_url=settings.base_url,
-            temperature=settings.temperature,
-        )
-        agent = SimpleAgent(name="database-sql-agent", llm=llm, system_prompt=SYSTEM_PROMPT)
-        result = agent.run(prompt)
-        return str(result)
-    except Exception:
-        return None
+# def _generate_with_hello_agents(prompt: str, settings: LLMSettings) -> str | None:
+#     try:
+#         from hello_agents import HelloAgentsLLM, SimpleAgent
+#     except Exception:
+#         return None
+#     try:
+#         llm = HelloAgentsLLM(
+#             model=settings.model,
+#             api_key=settings.api_key,
+#             base_url=settings.base_url,
+#             temperature=settings.temperature,
+#         )
+#         agent = SimpleAgent(name="database-sql-agent", llm=llm, system_prompt=SYSTEM_PROMPT)
+#         result = agent.run(prompt)
+#         return str(result)
+#     except Exception:
+#         return None
 
 
 def _generate_with_openai_compatible(prompt: str, settings: LLMSettings) -> str | None:
@@ -210,14 +236,14 @@ def _extract_sql(text: str) -> str:
 
 
 # 全局多智能体系统实例
-_database_agent_assistant= None
+_database_agent= None
 
 
-def get_database_agent_assistant() -> DatabaseAgentAssistant:
+def get_database_agent_assistant() -> DatabaseAgent:
     """获取多智能体旅行规划系统实例(单例模式)"""
-    global _database_agent_assistant
+    global _database_agent
 
-    if _database_agent_assistant is None:
-        _database_agent_assistant = DatabaseAgentAssistant()
+    if _database_agent is None:
+        _database_agent = DatabaseAgent()
 
-    return _database_agent_assistant
+    return _database_agent

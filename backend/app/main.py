@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from .database_agent import AgentConfigurationError, DatabaseAgentAssistant, get_database_agent_assistant, generate_sql
+from .database_agent import AgentConfigurationError, get_database_agent_assistant
 from .cache import result_cache
 from .database import DatabaseConfigurationError, create_database_client
 from .exporters import export_csv, export_insert_sql, export_xlsx
@@ -106,32 +106,37 @@ def get_schema() -> SchemaResponse:
 
 @app.post("/api/query", response_model=QueryResponse)
 def query_database(request: QueryRequest) -> QueryResponse:
-
+    settings = load_settings()
     try:
         print("🔄 获取数据库智能体实例...")
         # 使用 DatabaseAgent（ReActAgent）执行查询
+        client = create_database_client(settings.database)
         agent = get_database_agent_assistant()
-        result = agent.run(request.question, max_rows=request.max_rows)
-        sql = result.get("sql", "")
-        columns = result.get("columns", [])
-        rows = result.get("rows", [])
-        elapsed_ms = result.get("elapsed_ms", 0)
-        warnings = result.get("warnings", [])
+        generated_sql = agent.run(request.question, max_rows=request.max_rows)
+        limited_sql = apply_row_limit(generated_sql, request.max_rows)
+        started = time.perf_counter()
+        result = client.execute(limited_sql, max_rows=request.max_rows)
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        # sql = result.get("sql", "")
+        # columns = result.get("columns", [])
+        # rows = result.get("rows", [])
+        # elapsed_ms = result.get("elapsed_ms", 0)
+        # warnings = result.get("warnings", [])
         entry = ResultCacheEntry(
-            sql=sql,
-            columns=columns,
-            rows=rows,
-            inferred_table_name=infer_export_table_name(sql),
+            sql=generated_sql,
+            columns=result["columns"],
+            rows=result["rows"],
+            inferred_table_name=infer_export_table_name(generated_sql),
         )
         query_id = result_cache.set(entry)
         return QueryResponse(
             query_id=query_id,
-            sql=sql,
-            columns=columns,
-            rows=rows,
-            row_count=len(rows),
+            sql=generated_sql,
+            columns=result["columns"],
+            rows=result["rows"],
+            row_count=len(result["rows"]),
             elapsed_ms=elapsed_ms,
-            warnings=warnings,
+            warnings=[] if limited_sql == generated_sql else ["已自动限制最大返回行数"],
         )
     except (UnsafeSqlError, AgentConfigurationError, DatabaseConfigurationError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
