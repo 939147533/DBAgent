@@ -54,7 +54,10 @@ class BaseDatabaseClient:
     #     ]
 
     def list_schema(self, table_names: list[str], limit: int = 300) -> list[SchemaColumn]:
-        placeholders = ', '.join(['?'] * len(table_names))
+        # 使用命名占位符
+        placeholders = ', '.join([f':table{i}' for i in range(len(table_names))])
+        # 构建参数字典
+        params = {f'table{i}': table_name for i, table_name in enumerate(table_names)}
         sql = f"""
         SELECT utc.table_name, utc.column_name, utc.data_type, NVL(ucc.comments, '') AS comments
         FROM user_tab_columns utc
@@ -63,16 +66,20 @@ class BaseDatabaseClient:
         WHERE utc.table_name IN ({placeholders})
         ORDER BY utc.table_name, utc.column_id
         """
-        rows = self.execute(sql, max_rows=limit)["rows"]
+        rows = self.execute(sql, params=params, max_rows=limit)["rows"]
         return [
             SchemaColumn(table_name=str(row[0]), column_name=str(row[1]), data_type=str(row[2]), comments=str(row[3] or ""))
             for row in rows
         ]
 
-    def execute(self, sql: str, max_rows: int = 100) -> dict[str, Any]:
+    def execute(self, sql: str, params: Any = None, max_rows: int = 100) -> dict[str, Any]:
         with self.connect() as connection:
             cursor = connection.cursor()
-            cursor.execute(sql)
+            if params:
+                cursor.execute(sql, params)
+            else:
+                cursor.execute(sql)
+
             rows = cursor.fetchmany(max_rows)
             columns = [description[0] for description in cursor.description or []]
             return {"columns": columns, "rows": [list(row) for row in rows]}
