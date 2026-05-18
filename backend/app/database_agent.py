@@ -247,3 +247,8 @@ def get_database_agent_assistant() -> DatabaseAgent:
         _database_agent = DatabaseAgent()
 
     return _database_agent
+
+
+def reset_database_agent_assistant() -> None:
+    global _database_agent
+    _database_agent = None

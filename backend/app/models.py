@@ -27,6 +27,15 @@ class PublicDatabaseSettings(DatabaseSettings):
     password: str = ""
 
 
+class DatabaseProfile(DatabaseSettings):
+    id: str = ""
+    name: str = "Default database"
+
+
+class PublicDatabaseProfile(DatabaseProfile):
+    password: str = ""
+
+
 class LLMSettings(BaseModel):
     base_url: str = "https://api.openai.com/v1"
     api_key: str = ""
@@ -38,9 +47,42 @@ class PublicLLMSettings(LLMSettings):
     api_key: str = ""
 
 
+class LLMProfile(LLMSettings):
+    id: str = ""
+    name: str = "Default model"
+
+
+class PublicLLMProfile(LLMProfile):
+    api_key: str = ""
+
+
 class SettingsPayload(BaseModel):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    database_profiles: list[DatabaseProfile] = Field(default_factory=list)
+    active_database_id: str = ""
+    llm_profiles: list[LLMProfile] = Field(default_factory=list)
+    active_llm_id: str = ""
+
+
+class DatabaseProfilesPayload(BaseModel):
+    active_id: str = ""
+    profiles: list[DatabaseProfile] = Field(default_factory=list)
+
+
+class PublicDatabaseProfilesPayload(BaseModel):
+    active_id: str = ""
+    profiles: list[PublicDatabaseProfile] = Field(default_factory=list)
+
+
+class LLMProfilesPayload(BaseModel):
+    active_id: str = ""
+    profiles: list[LLMProfile] = Field(default_factory=list)
+
+
+class PublicLLMProfilesPayload(BaseModel):
+    active_id: str = ""
+    profiles: list[PublicLLMProfile] = Field(default_factory=list)
 
 
 class QueryRequest(BaseModel):

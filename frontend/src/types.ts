@@ -12,11 +12,31 @@ export interface DatabaseSettings {
   jdbc_jar_path: string;
 }
 
+export interface DatabaseProfile extends DatabaseSettings {
+  id: string;
+  name: string;
+}
+
+export interface DatabaseProfilesPayload {
+  active_id: string;
+  profiles: DatabaseProfile[];
+}
+
 export interface LlmSettings {
   base_url: string;
   api_key: string;
   model: string;
   temperature: number;
+}
+
+export interface LlmProfile extends LlmSettings {
+  id: string;
+  name: string;
+}
+
+export interface LlmProfilesPayload {
+  active_id: string;
+  profiles: LlmProfile[];
 }
 
 export interface QueryResponse {

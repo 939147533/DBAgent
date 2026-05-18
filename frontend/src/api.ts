@@ -1,4 +1,11 @@
-import type { DatabaseSettings, LlmSettings, QueryResponse, TestConnectionResponse } from './types';
+import type {
+  DatabaseProfilesPayload,
+  DatabaseSettings,
+  LlmProfilesPayload,
+  LlmSettings,
+  QueryResponse,
+  TestConnectionResponse,
+} from './types';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -16,11 +23,17 @@ export const api = {
   getDatabaseSettings: () => request<DatabaseSettings>('/api/settings/database'),
   saveDatabaseSettings: (settings: DatabaseSettings) =>
     request<DatabaseSettings>('/api/settings/database', { method: 'PUT', body: JSON.stringify(settings) }),
+  getDatabaseProfiles: () => request<DatabaseProfilesPayload>('/api/settings/database/profiles'),
+  saveDatabaseProfiles: (payload: DatabaseProfilesPayload) =>
+    request<DatabaseProfilesPayload>('/api/settings/database/profiles', { method: 'PUT', body: JSON.stringify(payload) }),
   testDatabaseSettings: (settings: DatabaseSettings) =>
     request<TestConnectionResponse>('/api/settings/database/test', { method: 'POST', body: JSON.stringify(settings) }),
   getLlmSettings: () => request<LlmSettings>('/api/settings/llm'),
   saveLlmSettings: (settings: LlmSettings) =>
     request<LlmSettings>('/api/settings/llm', { method: 'PUT', body: JSON.stringify(settings) }),
+  getLlmProfiles: () => request<LlmProfilesPayload>('/api/settings/llm/profiles'),
+  saveLlmProfiles: (payload: LlmProfilesPayload) =>
+    request<LlmProfilesPayload>('/api/settings/llm/profiles', { method: 'PUT', body: JSON.stringify(payload) }),
   testLlmSettings: (settings: LlmSettings) =>
     request<TestConnectionResponse>('/api/settings/llm/test', { method: 'POST', body: JSON.stringify(settings) }),
   query: (question: string, maxRows: number) =>
