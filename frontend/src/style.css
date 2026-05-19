@@ -605,3 +605,42 @@ td {
     justify-content: flex-start;
   }
 }
+
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 8px 30px rgba(20, 31, 44, 0.18);
+  pointer-events: auto;
+}
+
+.toast-ok {
+  background: #edfaf2;
+  color: #1a7d4e;
+  border: 1px solid #b4e4c8;
+}
+
+.toast-error {
+  background: #fff5f5;
+  color: #b13d35;
+  border: 1px solid #efc9c5;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
+}

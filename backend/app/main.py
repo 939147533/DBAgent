@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import httpx
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -140,7 +141,39 @@ def test_llm_settings(settings: LLMProfile | None = None) -> TestConnectionRespo
                 llm_settings.api_key = matched.api_key
         if not llm_settings.api_key or not llm_settings.model:
             raise AgentConfigurationError("大模型 API Key 或模型名称未配置")
-        return TestConnectionResponse(ok=True, message="配置格式有效")
+        
+        # 执行实际的大模型 API 调用测试
+        base_url = llm_settings.base_url.rstrip("/")
+        url = f"{base_url}/chat/completions"
+        payload = {
+            "model": llm_settings.model,
+            "temperature": 0,
+            "max_tokens": 10,
+            "messages": [
+                {"role": "system", "content": "请用一个字回答。"},
+                {"role": "user", "content": "你好"},
+            ],
+        }
+        try:
+            with httpx.Client(timeout=30) as client:
+                response = client.post(
+                    url,
+                    headers={"Authorization": f"Bearer {llm_settings.api_key}"},
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+                if "choices" in data and len(data["choices"]) > 0:
+                    return TestConnectionResponse(ok=True, message="大模型API测试通过")
+                else:
+                    return TestConnectionResponse(ok=False, message="大模型API响应格式不正确")
+        except httpx.TimeoutException:
+            return TestConnectionResponse(ok=False, message="大模型API请求超时")
+        except httpx.HTTPStatusError as exc:
+            return TestConnectionResponse(ok=False, message=f"大模型API请求失败: HTTP {exc.response.status_code}")
+        except Exception as exc:
+            return TestConnectionResponse(ok=False, message=f"大模型API调用异常: {str(exc)}")
+            
     except Exception as exc:
         return TestConnectionResponse(ok=False, message=str(exc))
 

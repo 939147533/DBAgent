@@ -1,4 +1,13 @@
 <template>
+  <Teleport to="body">
+    <Transition name="toast">
+      <div v-if="toast.show" :class="['toast', toast.ok ? 'toast-ok' : 'toast-error']">
+        <component :is="toast.ok ? CheckCircle : XCircle" class="icon" />
+        <span>{{ toast.message }}</span>
+      </div>
+    </Transition>
+  </Teleport>
+
   <div class="shell">
     <aside class="sidebar">
       <div class="brand">
@@ -338,6 +347,7 @@
 <script setup lang="ts">
 import {
   AlertTriangle,
+  CheckCircle,
   Copy,
   Database,
   Download,
@@ -354,6 +364,7 @@ import {
   Sparkles,
   Trash2,
   X,
+  XCircle,
 } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import { api, exportUrl } from './api';
@@ -380,6 +391,14 @@ const exportNameError = ref('');
 
 const busy = ref({ database: false, llm: false, query: false });
 const messages = ref({ database: '', databaseOk: false, llm: '', llmOk: false });
+
+const toast = ref({ show: false, ok: false, message: '', timer: 0 });
+
+function showToast(ok: boolean, message: string) {
+  clearTimeout(toast.value.timer);
+  toast.value = { show: true, ok, message, timer: 0 };
+  toast.value.timer = window.setTimeout(() => { toast.value.show = false; }, 3000);
+}
 
 const activeDatabase = computed(() => databaseProfiles.value.find((profile) => profile.id === activeDatabaseId.value));
 const activeLlm = computed(() => llmProfiles.value.find((profile) => profile.id === activeLlmId.value));
@@ -508,6 +527,7 @@ async function testDatabase() {
     const response = await api.testDatabaseSettings(databaseDraft.value!);
     messages.value.database = response.message;
     messages.value.databaseOk = response.ok;
+    showToast(response.ok, response.message);
   });
 }
 
@@ -517,6 +537,7 @@ async function testLlm() {
     const response = await api.testLlmSettings(llmDraft.value!);
     messages.value.llm = response.message;
     messages.value.llmOk = response.ok;
+    showToast(response.ok, response.message);
   });
 }
 
