@@ -62,7 +62,6 @@
     <main class="workspace">
       <header class="topbar">
         <div>
-          <p class="eyeline">Natural Language SQL Agent</p>
           <h2>用自然语言查询数据库</h2>
         </div>
         <div class="status">
