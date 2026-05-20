@@ -21,6 +21,7 @@ class DatabaseSettings(BaseModel):
     user: str = ""
     password: str = ""
     jdbc_jar_path: str = ""
+    table_name_sql: str = ""
 
 
 class PublicDatabaseSettings(DatabaseSettings):

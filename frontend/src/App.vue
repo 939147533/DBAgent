@@ -228,6 +228,19 @@
                 <input v-model="databaseDraft.password" type="password" autocomplete="new-password" />
               </label>
             </div>
+            <label>
+              数据表查询 SQL
+              <textarea
+                v-model="databaseDraft.table_name_sql"
+                placeholder="SELECT ut.table_name, utc.comments 
+                    from user_tables ut 
+                    left join user_tab_comments utc
+                      on ut.table_name = utc.table_name 
+                    order by ut.table_name"
+                rows="4"
+              ></textarea>
+              <small class="hint">非必输，自定义查询数据表的SQL，需返回 table_name 和 comments 两列</small>
+            </label>
             <div class="button-row split-actions">
               <button
                 type="button"
@@ -576,6 +589,7 @@ function newDatabaseProfile(index = 1): DatabaseProfile {
     user: '',
     password: '',
     jdbc_jar_path: '',
+    table_name_sql: '',
   };
 }
 

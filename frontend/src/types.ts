@@ -10,6 +10,7 @@ export interface DatabaseSettings {
   user: string;
   password: string;
   jdbc_jar_path: string;
+  table_name_sql: string;
 }
 
 export interface DatabaseProfile extends DatabaseSettings {

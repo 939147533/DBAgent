@@ -26,13 +26,18 @@ class BaseDatabaseClient:
         return "连接成功"
 
     def list_table_name(self, limit: int=4000) -> list[TableColumn]:
-        sql = """
-                SELECT ut.table_name, utc.comments 
-                from user_tables ut 
-                left join user_tab_comments utc
-                  on ut.table_name = utc.table_name 
-                order by ut.table_name
-                """
+        # 如果用户配置了自定义 SQL，则使用用户输入的 SQL
+        if self.settings.table_name_sql.strip():
+            sql = self.settings.table_name_sql.strip()
+        else:
+            # 默认 SQL
+            sql = """
+                    SELECT ut.table_name, utc.comments 
+                    from user_tables ut 
+                    left join user_tab_comments utc
+                      on ut.table_name = utc.table_name 
+                    order by ut.table_name
+                    """
         rows = self.execute(sql, max_rows=limit)["rows"]
         return [
             TableColumn(table_name=str(row[0]), table_comments=str(row[1] or ""))
